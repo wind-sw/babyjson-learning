@@ -1,0 +1,28 @@
+# C++ 编译生成的文件
+build/
+cmake-build-*/
+*.exe
+*.out
+*.o
+*.obj
+*.a
+*.so
+*.dll
+
+# IDE 配置文件
+.vscode/
+.idea/
+*.user
+*.suo
+*.sdf
+*.opensdf
+CMakeSettings.json
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 敏感信息
+*.key
+.env
+password.txt

@@ -86,6 +86,31 @@ std::pair<JSONObject, size_t> parse(std::string_view json) {
                 return {JSONObject{*num}, str.size()};
             }
         }
+    } else if (json[0] == 'n') {
+    // 检查是否以 "null" 开头，且后面不是标识符字符（字母/数字/下划线）
+    if (json.size() >= 4 && json.substr(0, 4) == "null") {
+        // 检查第5个字符（如果存在）是否不是 [a-zA-Z0-9_]
+        if (json.size() == 4 || !std::isalnum(static_cast<unsigned char>(json[4]))) {
+            return {JSONObject{std::nullptr_t{}}, 4};  // 吃掉 4 个字符
+        }
+    }
+    return {JSONObject{std::nullptr_t{}}, 0};  // 解析失败
+    
+    } else if (json[0] == 't') {
+        if (json.size() >= 4 && json.substr(0, 4) == "true") {
+            if (json.size() == 4 || !std::isalnum(static_cast<unsigned char>(json[4]))) {
+                return {JSONObject{true}, 4};  // bool 值为 true
+            }
+        }
+        return {JSONObject{std::nullptr_t{}}, 0};
+    
+    } else if (json[0] == 'f') {
+        if (json.size() >= 5 && json.substr(0, 5) == "false") {
+            if (json.size() == 5 || !std::isalnum(static_cast<unsigned char>(json[5]))) {
+                return {JSONObject{false}, 5};  // bool 值为 false，注意长度是 5
+            }
+        }
+        return {JSONObject{std::nullptr_t{}}, 0};
     } else if (json[0] == '"') {
         std::string str;
         enum {
@@ -183,30 +208,93 @@ template <class ...Fs>
 overloaded(Fs...) -> overloaded<Fs...>;
 
 int main() {
-    std::string_view str = R"JSON([[1,2
-    ],"aa"])JSON";
-    std::string_view str2 = R"JSON({"aaa":
-                                        {
-                                         "bbb":1
-                                        },
-                                        "ccc":2})JSON";
-    auto [obj, eaten] = parse(str);
-    print(obj);
+    // 测试1：基本字面量（数组中包含所有三种特殊值）
+    std::string_view basic = R"JSON([null, true, false, 42])JSON";
+    
+    // 测试2：深层嵌套（对象嵌套对象，再嵌套数组，包含混合类型）
+    std::string_view nested = R"JSON({
+        "success": true,
+        "error": null,
+        "valid": false,
+        "nested_obj": {
+            "flag": true,
+            "empty": null,
+            "deep_array": [false, true, null, {"inner_null": null}]
+        },
+        "mixed_array": [1, false, "text", null, true]
+    })JSON";
+    
+    // 测试3：边界情况（字面量紧跟其他字符，测试是否正确截断）
+    std::string_view edge = R"JSON({"a":null,"b":true,"c":false})JSON";
+
+    std::cout << "=== Test 1: Basic literals ===" << std::endl;
+    auto [obj1, eaten1] = parse(basic);
+    std::cout << "Parse completeness: " << eaten1 << "/" << basic.size() 
+              << (eaten1 == basic.size() ? " ✓" : " ✗") << std::endl;
+    print(obj1);
+    std::cout << std::endl << std::endl;
+
+    std::cout << "=== Test 2: Deeply nested structures ===" << std::endl;
+    auto [obj2, eaten2] = parse(nested);
+    std::cout << "Parse completeness: " << eaten2 << "/" << nested.size()
+              << (eaten2 == nested.size() ? " ✓" : " ✗") << std::endl;
+    print(obj2);
+    std::cout << std::endl << std::endl;
+
+    // 关键验证：使用 visit 检查类型是否正确识别
+    std::cout << "=== Type verification (root object) ===" << std::endl;
     std::visit(
         overloaded{
+            [&] (std::nullptr_t) {
+                print("Root is: null");
+            },
+            [&] (bool val) {
+                print("Root is: bool =", val ? "true" : "false");
+            },
             [&] (int val) {
-                print("int is:", val);
+                print("Root is: int =", val);
             },
             [&] (double val) {
-                print("double is:", val);
+                print("Root is: double =", val);
             },
-            [&] (std::string val) {
-                print("string is:", val);
+            [&] (const std::string& val) {
+                print("Root is: string =", val);
             },
-            [&] (auto val) {
-                print("unknown object is:", val);
+            [&] (const auto& container) {
+                // 处理 vector<JSONObject> (数组) 或 unordered_map (对象)
+                print("Root is: container with", container.size(), "elements");
             },
         },
-        obj.inner);
+        obj2.inner  // 验证嵌套对象的根类型（应该是 object/map）
+    );
+
+    // 递归验证：手动深入检查嵌套值
+    std::cout << "\n=== Deep value verification ===" << std::endl;
+    if (std::holds_alternative<JSONDict>(obj2.inner)) {
+        const auto& root_map = std::get<JSONDict>(obj2.inner);
+        
+        // 检查 "success": true
+        auto it = root_map.find("success");
+        if (it != root_map.end() && std::holds_alternative<bool>(it->second.inner)) {
+            std::cout << "success: " 
+                      << (std::get<bool>(it->second.inner) ? "true" : "false") 
+                      << " ✓" << std::endl;
+        }
+        
+        // 检查 "error": null
+        it = root_map.find("error");
+        if (it != root_map.end() && std::holds_alternative<std::nullptr_t>(it->second.inner)) {
+            std::cout << "error: null ✓" << std::endl;
+        }
+        
+        // 检查 "valid": false
+        it = root_map.find("valid");
+        if (it != root_map.end() && std::holds_alternative<bool>(it->second.inner)) {
+            std::cout << "valid: " 
+                      << (std::get<bool>(it->second.inner) ? "true" : "false") 
+                      << " ✓" << std::endl;
+        }
+    }
+
     return 0;
 }

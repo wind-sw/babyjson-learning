@@ -11,6 +11,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)      # 强制使用 C++17，不允许回退
 set(CMAKE_CXX_EXTENSIONS OFF)            # 禁用编译器扩展，确保跨平台一致性
 
+# 全局添加头文件搜索路径
+include_directories(include)
+
 # 创建可执行文件
 add_executable(main main.cpp)
 
